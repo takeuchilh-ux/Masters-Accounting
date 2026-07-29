@@ -128,8 +128,14 @@
 
       <!-- レシートプレビュー -->
       <div id="receipt-preview-wrap" class="hidden">
-        <img id="receipt-preview-img" src="" alt="レシート" class="w-full max-h-48 object-contain rounded-xl border border-gray-200 bg-gray-50">
+        <img id="receipt-preview-img" src="" alt="レシート" class="w-full max-h-48 object-contain rounded-xl border border-gray-200 bg-gray-50 cursor-pointer" onclick="document.getElementById('f-image-upload').click()">
       </div>
+      <!-- 画像添付ボタン -->
+      <input type="file" id="f-image-upload" accept="image/*" class="hidden" onchange="attachImageToForm(this)">
+      <button type="button" onclick="document.getElementById('f-image-upload').click()" id="f-image-btn" class="w-full py-2 rounded-xl border border-dashed border-gray-300 text-gray-500 text-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <span id="f-image-btn-label">画像を添付</span>
+      </button>
 
       <div class="grid grid-cols-2 gap-3">
         <div>
@@ -293,9 +299,16 @@
       </table>
     </div>
     <!-- アクションボタン -->
-    <div class="px-5 pb-5 flex gap-2">
-      <button id="dm-edit-btn" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors">編集</button>
-      <button id="dm-del-btn" class="px-4 py-2.5 bg-red-50 text-red-500 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors">削除</button>
+    <div class="px-5 pb-5 space-y-2">
+      <input type="file" id="dm-image-upload" accept="image/*" class="hidden" onchange="attachImageToDetail(this)">
+      <button id="dm-img-btn" onclick="document.getElementById('dm-image-upload').click()" class="w-full py-2.5 border border-dashed border-gray-300 text-gray-500 rounded-xl text-sm hover:bg-gray-50 transition-colors flex items-center justify-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <span id="dm-img-btn-label">画像を添付/差し替え</span>
+      </button>
+      <div class="flex gap-2">
+        <button id="dm-edit-btn" class="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-colors">編集</button>
+        <button id="dm-del-btn" class="px-4 py-2.5 bg-red-50 text-red-500 rounded-xl text-sm font-semibold hover:bg-red-100 transition-colors">削除</button>
+      </div>
     </div>
   </div>
 </div>
@@ -907,6 +920,8 @@ function openManualEntry(data) {
   const img = data?.receipt_image || data?.receipt_drive_url;
   document.getElementById('receipt-preview-wrap').classList.toggle('hidden', !img);
   if (img) document.getElementById('receipt-preview-img').src = img;
+  document.getElementById('f-image-btn-label').textContent = img ? '画像を差し替え' : '画像を添付';
+  document.getElementById('f-image-upload').value = '';
   closeWizard();
   document.getElementById('manual-modal').classList.remove('hidden');
 }
@@ -1050,6 +1065,60 @@ function exportCsv() {
   location.href = '/api/petty-cash/export/csv?' + params;
 }
 
+let detailCurrentId = null;
+
+async function attachImageToForm(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const label = document.getElementById('f-image-btn-label');
+  label.textContent = 'アップロード中...';
+  try {
+    const fd = new FormData();
+    fd.append('receipt', file);
+    const res = await fetch('/api/upload-image-only', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error('アップロード失敗');
+    const data = await res.json();
+    document.getElementById('f-receipt-image').value = data.receipt_image || '';
+    document.getElementById('f-receipt-drive-url').value = data.receipt_drive_url || '';
+    document.getElementById('receipt-preview-img').src = data.receipt_image || '';
+    document.getElementById('receipt-preview-wrap').classList.remove('hidden');
+    label.textContent = '画像を差し替え';
+    showToast('画像を添付しました');
+  } catch(e) {
+    label.textContent = '画像を添付';
+    showToast('画像のアップロードに失敗しました', 'error');
+  }
+  input.value = '';
+}
+
+async function attachImageToDetail(input) {
+  const file = input.files[0];
+  if (!file || !detailCurrentId) return;
+  const label = document.getElementById('dm-img-btn-label');
+  label.textContent = 'アップロード中...';
+  try {
+    const fd = new FormData();
+    fd.append('receipt', file);
+    const res = await fetch('/api/upload-image-only', { method: 'POST', body: fd });
+    if (!res.ok) throw new Error('アップロード失敗');
+    const data = await res.json();
+    await fetch(`/api/petty-cash/${detailCurrentId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ receipt_image: data.receipt_image, receipt_drive_url: data.receipt_drive_url })
+    });
+    document.getElementById('dm-img').src = data.receipt_image || '';
+    document.getElementById('dm-img-wrap').classList.remove('hidden');
+    label.textContent = '画像を差し替え';
+    showToast('画像を保存しました');
+    loadList();
+  } catch(e) {
+    label.textContent = '画像を添付/差し替え';
+    showToast('画像のアップロードに失敗しました', 'error');
+  }
+  input.value = '';
+}
+
 function showDetailModal(r) {
   const storeColors = {'藤沢事業所':'#dbeafe','藤沢市民病院':'#e0e7ff','藤沢湘南台病院':'#ede9fe','平塚市民病院':'#f3e8ff','西横浜国際総合病院':'#fce7f3','休日診療所':'#fce7f3'};
   document.getElementById('dm-payee').textContent = r.payee || '—';
@@ -1086,6 +1155,9 @@ function showDetailModal(r) {
   } else {
     document.getElementById('dm-img-wrap').classList.add('hidden');
   }
+  // 画像添付ボタン
+  detailCurrentId = r._id;
+  document.getElementById('dm-img-btn-label').textContent = (r.receipt_image || r.receipt_drive_url) ? '画像を差し替え' : '画像を添付';
   // ボタン
   document.getElementById('dm-edit-btn').onclick = () => { closeDetailModal(); editRow(r); };
   document.getElementById('dm-del-btn').onclick = () => { closeDetailModal(); deleteRow(r._id); };

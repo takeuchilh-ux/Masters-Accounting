@@ -336,6 +336,54 @@ app.delete('/api/petty-cash/:id', async (req, res) => {
 });
 
 // ── レシートOCR ────────────────────────────────────────────────────
+// 画像アップロードのみ（OCRなし）
+app.post('/api/upload-image-only', upload.single('receipt'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'ファイルが必要です' });
+  let imagePath = req.file.path;
+  let imageFilename = req.file.filename;
+  try {
+    const isHeic = req.file.mimetype === 'image/heic' || req.file.mimetype === 'image/heif' ||
+                   /\.(heic|heif)$/i.test(req.file.originalname);
+    if (isHeic) {
+      const inputBuffer = await fs.promises.readFile(imagePath);
+      let outputBuffer;
+      try {
+        outputBuffer = await heicConvert({ buffer: inputBuffer, format: 'JPEG', quality: 0.92 });
+      } catch(_) {
+        const images = await heicConvert.all({ buffer: inputBuffer, format: 'JPEG' });
+        if (!images || images.length === 0) throw new Error('HEICのデコードに失敗しました');
+        outputBuffer = await images[0].convert();
+      }
+      try {
+        const rotatedFilename = imageFilename.replace(/\.(heic|heif)$/i, '') + '_conv_r.jpg';
+        const rotatedPath = path.join(uploadDir, rotatedFilename);
+        await sharp(Buffer.from(outputBuffer)).rotate().jpeg({ quality: 92 }).toFile(rotatedPath);
+        imagePath = rotatedPath; imageFilename = rotatedFilename;
+      } catch(_) {
+        const jpegFilename = imageFilename.replace(/\.(heic|heif)$/i, '') + '_conv.jpg';
+        const jpegPath = path.join(uploadDir, jpegFilename);
+        await fs.promises.writeFile(jpegPath, Buffer.from(outputBuffer));
+        imagePath = jpegPath; imageFilename = jpegFilename;
+      }
+    } else {
+      try {
+        const rotated = imageFilename + '_r.jpg';
+        const rotatedPath = path.join(uploadDir, rotated);
+        await sharp(imagePath).rotate().jpeg({ quality: 92 }).toFile(rotatedPath);
+        imagePath = rotatedPath; imageFilename = rotated;
+      } catch(_) {}
+    }
+    const ext = path.extname(imageFilename).toLowerCase();
+    const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+    const driveResult = await uploadToDrive(imagePath, imageFilename, mimeType);
+    try { fs.unlinkSync(req.file.path); } catch(_) {}
+    try { if (imagePath !== req.file.path) fs.unlinkSync(imagePath); } catch(_) {}
+    res.json({ receipt_image: driveResult.imageUrl, receipt_drive_url: driveResult.viewUrl });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.post('/api/ocr', upload.single('receipt'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'ファイルが必要です' });
   const apiKey = process.env.ANTHROPIC_API_KEY;
