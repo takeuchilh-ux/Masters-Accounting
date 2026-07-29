@@ -212,6 +212,11 @@ app.get('/api/petty-cash', async (req, res) => {
       if (req.query.from) q.date.$gte = req.query.from;
       if (req.query.to)   q.date.$lte = req.query.to;
     }
+    if (req.query.reg_from || req.query.reg_to) {
+      q.created_at = {};
+      if (req.query.reg_from) q.created_at.$gte = req.query.reg_from + 'T00:00:00';
+      if (req.query.reg_to)   q.created_at.$lte = req.query.reg_to   + 'T23:59:59';
+    }
     if (req.query.q) {
       const re = new RegExp(req.query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       q.$or = [{ payee: re }, { item_name: re }, { notes: re }];

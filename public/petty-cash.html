@@ -324,15 +324,33 @@
       <select id="fil-account" class="form-input flex-1 min-w-36" onchange="loadList()">
         <option value="">すべての勘定科目</option>
       </select>
-      <div class="flex items-center gap-1 flex-1 min-w-44 border border-gray-300 rounded-lg px-2 bg-white">
+      <input type="text" id="fil-q" class="form-input flex-1 min-w-48" placeholder="🔍 支払先・品名で検索" oninput="debounceLoad()">
+    </div>
+    <!-- レシート日付フィルター -->
+    <div class="flex flex-wrap items-center gap-2 mt-2">
+      <span class="text-xs font-medium text-gray-500 w-20 flex-shrink-0">レシート日付</span>
+      <div class="flex items-center gap-1 flex-1 min-w-36 border border-gray-300 rounded-lg px-2 bg-white">
         <span class="text-xs text-gray-400 whitespace-nowrap">開始</span>
         <input type="date" id="fil-from" class="flex-1 text-sm py-2 outline-none min-w-0" onchange="loadList()">
       </div>
-      <div class="flex items-center gap-1 flex-1 min-w-44 border border-gray-300 rounded-lg px-2 bg-white">
+      <span class="text-xs text-gray-400">〜</span>
+      <div class="flex items-center gap-1 flex-1 min-w-36 border border-gray-300 rounded-lg px-2 bg-white">
         <span class="text-xs text-gray-400 whitespace-nowrap">終了</span>
         <input type="date" id="fil-to" class="flex-1 text-sm py-2 outline-none min-w-0" onchange="loadList()">
       </div>
-      <input type="text" id="fil-q" class="form-input flex-1 min-w-48" placeholder="🔍 支払先・品名で検索" oninput="debounceLoad()">
+    </div>
+    <!-- 登録日フィルター -->
+    <div class="flex flex-wrap items-center gap-2 mt-2">
+      <span class="text-xs font-medium text-gray-500 w-20 flex-shrink-0">登録日</span>
+      <div class="flex items-center gap-1 flex-1 min-w-36 border border-gray-300 rounded-lg px-2 bg-white">
+        <span class="text-xs text-gray-400 whitespace-nowrap">開始</span>
+        <input type="date" id="fil-reg-from" class="flex-1 text-sm py-2 outline-none min-w-0" onchange="loadList()">
+      </div>
+      <span class="text-xs text-gray-400">〜</span>
+      <div class="flex items-center gap-1 flex-1 min-w-36 border border-gray-300 rounded-lg px-2 bg-white">
+        <span class="text-xs text-gray-400 whitespace-nowrap">終了</span>
+        <input type="date" id="fil-reg-to" class="flex-1 text-sm py-2 outline-none min-w-0" onchange="loadList()">
+      </div>
     </div>
     <div class="flex items-center justify-between mt-3">
       <span id="list-summary" class="text-sm text-gray-500"></span>
@@ -974,7 +992,7 @@ function debounceLoad() {
 }
 
 function clearFilters() {
-  ['fil-store','fil-account','fil-from','fil-to'].forEach(id => document.getElementById(id).value = '');
+  ['fil-store','fil-account','fil-from','fil-to','fil-reg-from','fil-reg-to'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('fil-q').value = '';
   loadList();
 }
@@ -985,11 +1003,15 @@ async function loadList() {
   const account = document.getElementById('fil-account').value;
   const from = document.getElementById('fil-from').value;
   const to = document.getElementById('fil-to').value;
+  const regFrom = document.getElementById('fil-reg-from').value;
+  const regTo = document.getElementById('fil-reg-to').value;
   const q = document.getElementById('fil-q').value;
   if (store) params.set('store', store);
   if (account) params.set('account_category', account);
   if (from) params.set('from', from);
   if (to) params.set('to', to);
+  if (regFrom) params.set('reg_from', regFrom);
+  if (regTo) params.set('reg_to', regTo);
   if (q) params.set('q', q);
   const r = await fetch('/api/petty-cash?' + params);
   const rows = await r.json();
