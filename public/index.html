@@ -115,17 +115,14 @@ async function logout() {
   location.href = '/login.html';
 }
 
+function fmtDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function setCurrentCycle() {
   const today = new Date();
-  const day = today.getDate(), y = today.getFullYear(), m = today.getMonth();
-  let from, to;
-  if (day <= 25) {
-    from = new Date(y, m - 1, 25).toISOString().split('T')[0];
-    to   = new Date(y, m,     25).toISOString().split('T')[0];
-  } else {
-    from = new Date(y, m,     25).toISOString().split('T')[0];
-    to   = new Date(y, m + 1, 25).toISOString().split('T')[0];
-  }
+  const y = today.getFullYear(), m = today.getMonth();
+  const from = fmtDate(new Date(y, m - 1, 25));
+  const to   = fmtDate(new Date(y, m,     24));
   document.getElementById('filter-from').value = from;
   document.getElementById('filter-to').value   = to;
   document.getElementById('cycle-label').textContent = `${from} 〜 ${to}`;
