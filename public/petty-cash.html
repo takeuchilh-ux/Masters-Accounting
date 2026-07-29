@@ -74,8 +74,12 @@
 
     <!-- STEP 2: AI解析中 -->
     <div id="step-2" class="flex-1 overflow-y-auto p-5 hidden">
-      <p class="text-sm text-gray-500 mb-4 text-center">レシートを解析しています...</p>
-      <div id="ocr-progress" class="space-y-3"></div>
+      <p id="step2-title" class="text-sm text-gray-500 mb-4 text-center">レシートを解析しています...</p>
+      <div id="ocr-progress" class="space-y-2"></div>
+      <div id="ocr-result-bar" class="hidden mt-4 space-y-3">
+        <div id="ocr-result-msg" class="text-sm text-center font-medium"></div>
+        <button id="btn-proceed-edit" onclick="proceedToEdit()" class="w-full py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hidden"></button>
+      </div>
     </div>
 
     <!-- STEP 3: 確認・修正（1枚ずつ） -->
@@ -203,6 +207,10 @@
             <input type="number" id="f-tax-8" class="form-input" min="0" oninput="calcTotalFromTax()">
           </div>
         </div>
+        <div>
+          <label class="form-label text-xs">非課税金額</label>
+          <input type="number" id="f-non-taxable" class="form-input" min="0" placeholder="0" oninput="calcTotalFromTax()">
+        </div>
       </div>
 
       <div>
@@ -321,6 +329,33 @@
         </button>
         <button onclick="clearFilters()" class="text-sm text-blue-600 hover:underline">クリア</button>
       </div>
+    </div>
+  </div>
+
+  <!-- 個人別集計パネル -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-5 overflow-hidden">
+    <button onclick="toggleSummary()" class="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-50 transition-colors">
+      <span class="font-semibold text-gray-700 text-sm flex items-center gap-2">
+        <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        個人別集計
+      </span>
+      <svg id="summary-chevron" class="w-4 h-4 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+    </button>
+    <div id="summary-panel" class="hidden border-t border-gray-100">
+      <div class="px-4 py-3 flex flex-wrap items-center gap-2">
+        <span class="text-xs text-gray-500 whitespace-nowrap">登録期間</span>
+        <div class="flex items-center gap-1 border border-gray-300 rounded-lg px-2 bg-white">
+          <span class="text-xs text-gray-400">開始</span>
+          <input type="date" id="sum-from" class="text-sm py-1.5 outline-none" onchange="loadSummary()">
+        </div>
+        <span class="text-xs text-gray-400">〜</span>
+        <div class="flex items-center gap-1 border border-gray-300 rounded-lg px-2 bg-white">
+          <span class="text-xs text-gray-400">終了</span>
+          <input type="date" id="sum-to" class="text-sm py-1.5 outline-none" onchange="loadSummary()">
+        </div>
+        <button onclick="setSumCycle()" class="text-xs text-blue-600 hover:underline whitespace-nowrap">今サイクル</button>
+      </div>
+      <div id="summary-body" class="px-4 pb-4"></div>
     </div>
   </div>
 
@@ -487,22 +522,24 @@ function calcFromQty() {
 }
 
 function calcFromRates() {
-  const a10 = parseFloat(document.getElementById('f-amount-10').value) || 0;
-  const a8  = parseFloat(document.getElementById('f-amount-8').value)  || 0;
+  const a10  = parseFloat(document.getElementById('f-amount-10').value)    || 0;
+  const a8   = parseFloat(document.getElementById('f-amount-8').value)     || 0;
+  const nont = parseFloat(document.getElementById('f-non-taxable').value)  || 0;
   const t10 = a10 > 0 ? Math.round(a10 * 0.1) : (parseFloat(document.getElementById('f-tax-10').value) || 0);
   const t8  = a8  > 0 ? Math.round(a8  * 0.08): (parseFloat(document.getElementById('f-tax-8').value)  || 0);
   if (a10 > 0) document.getElementById('f-tax-10').value = t10;
   if (a8  > 0) document.getElementById('f-tax-8').value  = t8;
-  const total = a10 + t10 + a8 + t8;
+  const total = a10 + t10 + a8 + t8 + nont;
   if (total > 0) document.getElementById('f-total').value = total;
 }
 
 function calcTotalFromTax() {
-  const a10 = parseFloat(document.getElementById('f-amount-10').value) || 0;
-  const t10 = parseFloat(document.getElementById('f-tax-10').value)    || 0;
-  const a8  = parseFloat(document.getElementById('f-amount-8').value)  || 0;
-  const t8  = parseFloat(document.getElementById('f-tax-8').value)     || 0;
-  const total = a10 + t10 + a8 + t8;
+  const a10  = parseFloat(document.getElementById('f-amount-10').value)   || 0;
+  const t10  = parseFloat(document.getElementById('f-tax-10').value)      || 0;
+  const a8   = parseFloat(document.getElementById('f-amount-8').value)    || 0;
+  const t8   = parseFloat(document.getElementById('f-tax-8').value)       || 0;
+  const nont = parseFloat(document.getElementById('f-non-taxable').value) || 0;
+  const total = a10 + t10 + a8 + t8 + nont;
   if (total > 0) document.getElementById('f-total').value = total;
 }
 
@@ -590,34 +627,106 @@ async function goStep(step) {
 
 async function runOcr() {
   updateWizardStep(2);
-  wizardResults = [];
+  wizardResults = new Array(wizardFiles.length).fill(null);
+  document.getElementById('step2-title').textContent = 'レシートを解析しています...';
+  document.getElementById('ocr-result-bar').classList.add('hidden');
+
   const prog = document.getElementById('ocr-progress');
   prog.innerHTML = wizardFiles.map((f, i) =>
     `<div id="ocr-row-${i}" class="flex items-center gap-3 p-3 bg-gray-50 rounded-xl">
-      <span class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500">${i+1}</span>
+      <span class="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold text-gray-500 flex-shrink-0">${i+1}</span>
       <span class="flex-1 text-sm text-gray-700 truncate">${f.name}</span>
-      <span id="ocr-status-${i}" class="text-gray-400 text-sm">待機中</span>
+      <span id="ocr-status-${i}" class="text-gray-400 text-sm whitespace-nowrap">待機中</span>
     </div>`
   ).join('');
 
   for (let i = 0; i < wizardFiles.length; i++) {
-    document.getElementById(`ocr-status-${i}`).textContent = '解析中... ⏳';
-    try {
-      const fd = new FormData();
-      fd.append('receipt', wizardFiles[i]);
-      const r = await fetch('/api/ocr', { method: 'POST', body: fd });
-      const d = await r.json();
-      if (d.error) throw new Error(d.error);
-      wizardResults.push({ ...d, _fileIdx: i, _checked: true });
-      document.getElementById(`ocr-status-${i}`).textContent = '完了 ✅';
-      document.getElementById(`ocr-row-${i}`).classList.add('bg-green-50');
-    } catch(e) {
-      wizardResults.push({ _fileIdx: i, _checked: false, _error: e.message });
-      document.getElementById(`ocr-status-${i}`).textContent = 'エラー ❌';
-      document.getElementById(`ocr-row-${i}`).classList.add('bg-red-50');
-    }
+    await ocrOneFile(i);
   }
-  setTimeout(() => { currentCardIdx = 0; updateWizardStep(3); renderCardForm(); }, 800);
+  showOcrResult();
+}
+
+async function ocrOneFile(i) {
+  const row = document.getElementById(`ocr-row-${i}`);
+  const statusEl = document.getElementById(`ocr-status-${i}`);
+  if (!row || !statusEl) return;
+
+  // リセット
+  row.className = 'flex items-center gap-3 p-3 bg-gray-50 rounded-xl';
+  statusEl.textContent = '解析中... ⏳';
+
+  // 再試行ボタンがあれば削除
+  const oldBtn = document.getElementById(`ocr-retry-${i}`);
+  if (oldBtn) oldBtn.remove();
+
+  try {
+    const { hash, duplicate, existing } = await checkDuplicate(wizardFiles[i]);
+    if (duplicate && existing) {
+      const ok = confirm(`⚠️ このレシートは既に登録されている可能性があります。\n\n登録済み: ${existing.date} / ${existing.payee} / ¥${Number(existing.total_amount||0).toLocaleString()}（No.${existing.no}）\n\n続けて登録しますか？`);
+      if (!ok) {
+        wizardResults[i] = { _fileIdx: i, _checked: false, _error: '重複のためスキップ' };
+        statusEl.textContent = 'スキップ ⚠️';
+        row.classList.add('bg-yellow-50');
+        return;
+      }
+    }
+    const fd = new FormData();
+    fd.append('receipt', wizardFiles[i]);
+    const r = await fetch('/api/ocr', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    wizardResults[i] = { ...d, _fileIdx: i, _checked: true, image_hash: hash };
+    statusEl.textContent = '完了 ✅';
+    row.classList.add('bg-green-50');
+  } catch(e) {
+    wizardResults[i] = { _fileIdx: i, _checked: false, _error: e.message };
+    statusEl.textContent = 'エラー ❌';
+    row.classList.add('bg-red-50');
+    // 再試行ボタンを追加
+    const btn = document.createElement('button');
+    btn.id = `ocr-retry-${i}`;
+    btn.textContent = '再試行';
+    btn.className = 'ml-1 text-xs px-2 py-1 rounded-lg bg-orange-100 text-orange-600 hover:bg-orange-200 flex-shrink-0';
+    btn.onclick = async () => {
+      await ocrOneFile(i);
+      showOcrResult();
+    };
+    row.appendChild(btn);
+  }
+}
+
+function showOcrResult() {
+  const results = wizardResults.filter(r => r !== null);
+  const ok  = results.filter(r => !r._error);
+  const err = results.filter(r => r._error && r._error !== '重複のためスキップ');
+  const skip = results.filter(r => r._error === '重複のためスキップ');
+
+  document.getElementById('step2-title').textContent = '解析完了';
+  const bar = document.getElementById('ocr-result-bar');
+  bar.classList.remove('hidden');
+
+  let msg = `<span class="text-green-600">✅ 成功 ${ok.length}件</span>`;
+  if (err.length)  msg += `　<span class="text-red-500">❌ エラー ${err.length}件</span>`;
+  if (skip.length) msg += `　<span class="text-yellow-600">⚠️ スキップ ${skip.length}件</span>`;
+  document.getElementById('ocr-result-msg').innerHTML = msg;
+
+  const proceedBtn = document.getElementById('btn-proceed-edit');
+  if (ok.length > 0) {
+    proceedBtn.textContent = err.length > 0
+      ? `成功した ${ok.length}件で編集に進む`
+      : `${ok.length}件を編集・保存する`;
+    proceedBtn.classList.remove('hidden');
+  } else {
+    proceedBtn.classList.add('hidden');
+  }
+}
+
+function proceedToEdit() {
+  // nullや_errorのものを除いた有効結果だけに絞る
+  wizardResults = wizardResults.filter(r => r !== null && !r._error);
+  currentCardIdx = 0;
+  updateWizardStep(3);
+  renderCardForm();
 }
 
 async function renderCardForm() {
@@ -680,6 +789,7 @@ async function renderCardForm() {
         <div><label class="form-label text-xs">8%対象 税抜</label><input type="number" id="c-a8-${currentCardIdx}" class="form-input" value="${r.amount_8||''}"></div>
         <div><label class="form-label text-xs">消費税(8%)</label><input type="number" id="c-t8-${currentCardIdx}" class="form-input" value="${r.tax_amount_8||''}"></div>
       </div>
+      <div><label class="form-label text-xs">非課税金額</label><input type="number" id="c-nontax-${currentCardIdx}" class="form-input" value="${r.amount_non_taxable||''}" placeholder="0"></div>
     </div>
     <div><label class="form-label">登録番号</label><input type="text" id="c-regno-${currentCardIdx}" class="form-input" placeholder="T1234567890123（なければ空欄）" value="${r.registration_no||''}"></div>`;
 }
@@ -696,9 +806,10 @@ function saveCardToResult() {
   r.account_category = document.getElementById(`c-account-${i}`)?.value || '';
   r.amount_10      = parseFloat(document.getElementById(`c-a10-${i}`)?.value) || null;
   r.tax_amount_10  = parseFloat(document.getElementById(`c-t10-${i}`)?.value) || null;
-  r.amount_8       = parseFloat(document.getElementById(`c-a8-${i}`)?.value)  || null;
-  r.tax_amount_8   = parseFloat(document.getElementById(`c-t8-${i}`)?.value)  || null;
-  r.registration_no = document.getElementById(`c-regno-${i}`)?.value.trim() || null;
+  r.amount_8           = parseFloat(document.getElementById(`c-a8-${i}`)?.value)     || null;
+  r.tax_amount_8       = parseFloat(document.getElementById(`c-t8-${i}`)?.value)     || null;
+  r.amount_non_taxable = parseFloat(document.getElementById(`c-nontax-${i}`)?.value) || null;
+  r.registration_no    = document.getElementById(`c-regno-${i}`)?.value.trim()       || null;
 }
 
 function nextCard() {
@@ -746,9 +857,11 @@ async function saveAll() {
           item_name: r.item_name, account_category: r.account_category,
           amount_10: r.amount_10, tax_amount_10: r.tax_amount_10,
           amount_8: r.amount_8, tax_amount_8: r.tax_amount_8,
+          amount_non_taxable: r.amount_non_taxable || null,
           total_amount: r.total_amount, tax_category: r.tax_category,
           receipt_image: r.receipt_image, receipt_drive_url: r.receipt_drive_url,
           registration_no: r.registration_no || null,
+          image_hash: r.image_hash || null,
         })
       });
       if (res.status === 401) { location.href = '/login.html'; return; }
@@ -784,6 +897,7 @@ function openManualEntry(data) {
   document.getElementById('f-amount-8').value = data?.amount_8 || '';
   document.getElementById('f-tax-8').value = data?.tax_amount_8 || '';
   document.getElementById('f-total').value = data?.total_amount || '';
+  document.getElementById('f-non-taxable').value = data?.amount_non_taxable || '';
   document.getElementById('f-regno').value = data?.registration_no || '';
   document.getElementById('f-notes').value = data?.notes || '';
   setComboVal('store', data?.store || '');
@@ -821,6 +935,7 @@ async function submitForm() {
     tax_amount_8: parseFloat(document.getElementById('f-tax-8').value) || null,
     total_amount: parseFloat(document.getElementById('f-total').value) || null,
     tax_category: getComboVal('tax_category'),
+    amount_non_taxable: parseFloat(document.getElementById('f-non-taxable').value) || null,
     registration_no: document.getElementById('f-regno').value.trim() || null,
     notes: document.getElementById('f-notes').value,
     receipt_image: document.getElementById('f-receipt-image').value,
@@ -888,8 +1003,9 @@ async function loadList() {
             ${r.no ? `<span class="text-xs text-gray-400 font-mono bg-gray-50 px-1.5 py-0.5 rounded">No.${r.no}</span>` : ''}
             <span class="text-xs text-gray-400">${r.date || ''}</span>
             <span class="font-bold text-blue-700">¥${(r.total_amount || 0).toLocaleString()}</span>
-            ${r.amount_10 ? `<span class="text-xs text-gray-400">10%対象:¥${r.amount_10.toLocaleString()}</span>` : ''}
-            ${r.amount_8  ? `<span class="text-xs text-gray-400">8%対象:¥${r.amount_8.toLocaleString()}</span>`  : ''}
+            ${r.amount_10 ? `<span class="text-xs text-gray-400">10%:¥${r.amount_10.toLocaleString()}</span>` : ''}
+            ${r.amount_8  ? `<span class="text-xs text-gray-400">8%:¥${r.amount_8.toLocaleString()}</span>`  : ''}
+            ${r.amount_non_taxable ? `<span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">非課税:¥${Number(r.amount_non_taxable).toLocaleString()}</span>` : ''}
           </div>
           ${r.registration_no ? `<p class="text-xs text-gray-400 mt-1">登録番号: ${r.registration_no}</p>` : ''}
         </div>
@@ -955,6 +1071,7 @@ function showDetailModal(r) {
     ['10%消費税', r.tax_amount_10 ? `¥${Number(r.tax_amount_10).toLocaleString()}` : '—'],
     ['8%税抜', r.amount_8 ? `¥${Number(r.amount_8).toLocaleString()}` : '—'],
     ['8%消費税', r.tax_amount_8 ? `¥${Number(r.tax_amount_8).toLocaleString()}` : '—'],
+    ['非課税金額', r.amount_non_taxable ? `¥${Number(r.amount_non_taxable).toLocaleString()}` : '—'],
     ['合計金額', `<span class="font-bold text-blue-700 text-base">¥${Number(r.total_amount||0).toLocaleString()}</span>`],
     ['登録番号', r.registration_no || null],
   ].filter(([,v]) => v && v !== '—');
@@ -1026,6 +1143,93 @@ async function init() {
 }
 
 init();
+
+// ─── 個人別集計 ─────────────────────────────────────────────
+let summaryOpen = false;
+
+function toggleSummary() {
+  summaryOpen = !summaryOpen;
+  document.getElementById('summary-panel').classList.toggle('hidden', !summaryOpen);
+  document.getElementById('summary-chevron').style.transform = summaryOpen ? 'rotate(180deg)' : '';
+  if (summaryOpen && !document.getElementById('sum-from').value) {
+    setSumCycle();
+  }
+}
+
+function setSumCycle() {
+  const today = new Date();
+  const day = today.getDate();
+  const y = today.getFullYear(), m = today.getMonth();
+  let from, to;
+  if (day <= 25) {
+    // 先月25日〜今月25日
+    const prev = new Date(y, m - 1, 25);
+    const curr = new Date(y, m, 25);
+    from = prev.toISOString().split('T')[0];
+    to   = curr.toISOString().split('T')[0];
+  } else {
+    // 今月25日〜来月25日
+    const curr = new Date(y, m, 25);
+    const next = new Date(y, m + 1, 25);
+    from = curr.toISOString().split('T')[0];
+    to   = next.toISOString().split('T')[0];
+  }
+  document.getElementById('sum-from').value = from;
+  document.getElementById('sum-to').value   = to;
+  loadSummary();
+}
+
+async function loadSummary() {
+  const from = document.getElementById('sum-from').value;
+  const to   = document.getElementById('sum-to').value;
+  const el   = document.getElementById('summary-body');
+  el.innerHTML = '<p class="text-xs text-gray-400 py-2">読み込み中...</p>';
+  try {
+    const params = new URLSearchParams();
+    if (from) params.set('from', from);
+    if (to)   params.set('to', to);
+    const r = await fetch('/api/petty-cash/summary?' + params);
+    if (r.status === 401) { location.href = '/login.html'; return; }
+    const d = await r.json();
+    if (!d.items || d.items.length === 0) {
+      el.innerHTML = '<p class="text-xs text-gray-400 py-2">この期間のデータはありません</p>';
+      return;
+    }
+    const total = d.items.reduce((s, x) => s + x.total, 0);
+    el.innerHTML = `
+      <div class="space-y-1">
+        ${d.items.map(x => `
+          <div class="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
+            <span class="text-sm text-gray-700 font-medium">${x.purchaser}</span>
+            <span class="text-sm font-bold text-blue-700">¥${x.total.toLocaleString()}</span>
+          </div>`).join('')}
+        <div class="flex items-center justify-between pt-2 mt-1">
+          <span class="text-sm text-gray-500 font-semibold">合計</span>
+          <span class="text-base font-bold text-gray-800">¥${total.toLocaleString()}</span>
+        </div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<p class="text-xs text-red-400 py-2">エラー: ${e.message}</p>`;
+  }
+}
+
+// ─── 重複レシート検知（SHA-256ハッシュ） ─────────────────────
+async function computeFileHash(file) {
+  const buf = await file.arrayBuffer();
+  const hashBuf = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function checkDuplicate(file) {
+  try {
+    const hash = await computeFileHash(file);
+    const r = await fetch(`/api/petty-cash/check-duplicate?hash=${hash}`);
+    const d = await r.json();
+    return { hash, duplicate: d.duplicate, existing: d.existing };
+  } catch(_) {
+    return { hash: null, duplicate: false };
+  }
+}
 </script>
 </body>
 </html>

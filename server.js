@@ -221,6 +221,44 @@ app.get('/api/petty-cash', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// 個人別集計（登録日ベース）
+app.get('/api/petty-cash/summary', async (req, res) => {
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    const url = (process.env.SUPABASE_URL || '').trim();
+    const key = (process.env.SUPABASE_ANON_KEY || '').trim();
+    const sb = createClient(url, key);
+    let q = sb.from('petty_cash').select('purchaser, total_amount, created_at');
+    if (req.query.from) q = q.gte('created_at', req.query.from + 'T00:00:00');
+    if (req.query.to)   q = q.lte('created_at', req.query.to   + 'T23:59:59');
+    const { data, error } = await q;
+    if (error) return res.status(500).json({ error: error.message });
+    const totals = {};
+    for (const r of data || []) {
+      const name = r.purchaser || '（未設定）';
+      totals[name] = (totals[name] || 0) + (Number(r.total_amount) || 0);
+    }
+    const result = Object.entries(totals)
+      .map(([purchaser, total]) => ({ purchaser, total }))
+      .sort((a, b) => b.total - a.total);
+    res.json({ items: result, period: { from: req.query.from, to: req.query.to } });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// 重複レシートチェック（画像ハッシュ）
+app.get('/api/petty-cash/check-duplicate', async (req, res) => {
+  try {
+    const { hash } = req.query;
+    if (!hash) return res.json({ duplicate: false });
+    const existing = await pettyCash.findOne({ image_hash: hash });
+    if (existing) {
+      res.json({ duplicate: true, existing: { date: existing.date, payee: existing.payee, total_amount: existing.total_amount, no: existing.no } });
+    } else {
+      res.json({ duplicate: false });
+    }
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/petty-cash/export/csv', async (req, res) => {
   try {
     const q = {};
@@ -231,14 +269,14 @@ app.get('/api/petty-cash/export/csv', async (req, res) => {
       if (req.query.to)   q.date.$lte = req.query.to;
     }
     const rows = await pettyCash.find(q).sort({ date: 1, no: 1 });
-    const headers = ['No.','日付','事業所','購入者','支払先','品名','勘定科目','数量','単価','10%税抜金額','10%消費税','8%税抜金額','8%消費税','合計金額（税込）','税区分','備考'];
+    const headers = ['No.','日付','事業所','購入者','支払先','品名','勘定科目','数量','単価','10%税抜金額','10%消費税','8%税抜金額','8%消費税','非課税金額','合計金額（税込）','税区分','備考'];
     const lines = ['﻿' + headers.join(',')];
     for (const r of rows) {
       lines.push([
         r.no, r.date, r.store, r.purchaser, r.payee, r.item_name, r.account_category,
         r.quantity, r.unit_price,
         r.amount_10, r.tax_amount_10, r.amount_8, r.tax_amount_8,
-        r.total_amount, r.tax_category, r.notes
+        r.amount_non_taxable, r.total_amount, r.tax_category, r.notes
       ].map(v => `"${(v ?? '').toString().replace(/"/g,'""')}"`).join(','));
     }
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -258,6 +296,7 @@ app.get('/api/petty-cash/:id', async (req, res) => {
 app.post('/api/petty-cash', async (req, res) => {
   try {
     const data = { ...req.body, created_at: new Date().toISOString() };
+    // image_hash は req.body からそのまま引き継ぐ（重複チェック用）
     // 採番: YYYYMMDD-NNN（同日の連番）
     const dateStr = (data.date || new Date().toISOString().split('T')[0]).replace(/-/g, '');
     const sameDate = await pettyCash.find({ date: data.date });
@@ -320,9 +359,19 @@ app.post('/api/ocr', upload.single('receipt'), async (req, res) => {
         if (!images || images.length === 0) throw new Error('HEICのデコードに失敗しました');
         outputBuffer = await images[0].convert();
       }
-      await fs.promises.writeFile(jpegPath, Buffer.from(outputBuffer));
-      imagePath = jpegPath;
-      imageFilename = jpegFilename;
+      // HEIC変換後もEXIF回転補正を適用（横向き撮影対応）
+      try {
+        const rotatedFilename = imageFilename.replace(/\.(heic|heif)$/i, '') + '_conv_r.jpg';
+        const rotatedPath = path.join(uploadDir, rotatedFilename);
+        await sharp(Buffer.from(outputBuffer)).rotate().jpeg({ quality: 92 }).toFile(rotatedPath);
+        imagePath = rotatedPath;
+        imageFilename = rotatedFilename;
+      } catch(_) {
+        // 回転失敗時は変換済みJPEGをそのまま使用
+        await fs.promises.writeFile(jpegPath, Buffer.from(outputBuffer));
+        imagePath = jpegPath;
+        imageFilename = jpegFilename;
+      }
     } else {
       try {
         const rotated = imageFilename + '_r.jpg';
@@ -361,8 +410,9 @@ app.post('/api/ocr', upload.single('receipt'), async (req, res) => {
   "tax_amount_10": 10%の消費税額（レシートに明記されている場合のみ数値。なければnull）,
   "amount_8": 8%対象の税抜金額（レシートに明記されている場合のみ数値。なければnull）,
   "tax_amount_8": 8%の消費税額（レシートに明記されている場合のみ数値。なければnull）,
+  "amount_non_taxable": 非課税金額（レシートに「非課税」として明記されている金額。なければnull）,
   "total_amount": 合計金額（税込）（レシートに記載の最終合計額を数値で。なければnull）,
-  "tax_category": "課税区分（課税/軽減税率（8%）/非課税/不課税）",
+  "tax_category": "課税区分（課税/軽減税率（8%）/非課税/不課税/混在）",
   "registration_no": "適格請求書発行事業者の登録番号（T+13桁の数字。レシートに記載がなければnull）"
 }
 JSONのみ返してください。` }
@@ -431,6 +481,56 @@ app.get('/api/summary', async (req, res) => {
       .sort((a, b) => b.total - a.total).slice(0, 10);
 
     res.json({ count: all.length, total, byStore, byAccount });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ホーム用集計（登録日ベース：25日サイクル対応）
+app.get('/api/home-summary', async (req, res) => {
+  try {
+    const { createClient } = require('@supabase/supabase-js');
+    const url = (process.env.SUPABASE_URL || '').trim();
+    const key = (process.env.SUPABASE_ANON_KEY || '').trim();
+    const sb = createClient(url, key);
+    let q = sb.from('petty_cash').select('account_category, purchaser, store, total_amount, created_at');
+    if (req.query.from) q = q.gte('created_at', req.query.from + 'T00:00:00');
+    if (req.query.to)   q = q.lte('created_at', req.query.to   + 'T23:59:59');
+    const { data, error } = await q;
+    if (error) return res.status(500).json({ error: error.message });
+    const rows = data || [];
+    const toNum = v => Number(v) || 0;
+    const total = rows.reduce((s, r) => s + toNum(r.total_amount), 0);
+
+    // 勘定科目別（金額降順、制限なし）
+    const accMap = {};
+    for (const r of rows) {
+      const a = r.account_category || '（未設定）';
+      accMap[a] = (accMap[a] || 0) + toNum(r.total_amount);
+    }
+    const byAccount = Object.entries(accMap)
+      .map(([account_category, t]) => ({ account_category, total: t }))
+      .sort((a, b) => b.total - a.total);
+
+    // 購入者別（金額降順）
+    const purMap = {};
+    for (const r of rows) {
+      const p = r.purchaser || '（未設定）';
+      purMap[p] = (purMap[p] || 0) + toNum(r.total_amount);
+    }
+    const byPurchaser = Object.entries(purMap)
+      .map(([purchaser, t]) => ({ purchaser, total: t }))
+      .sort((a, b) => b.total - a.total);
+
+    // 事業所別（金額降順）
+    const storeMap = {};
+    for (const r of rows) {
+      const s = r.store || '（未設定）';
+      storeMap[s] = (storeMap[s] || 0) + toNum(r.total_amount);
+    }
+    const byStore = Object.entries(storeMap)
+      .map(([store, t]) => ({ store, total: t }))
+      .sort((a, b) => b.total - a.total);
+
+    res.json({ count: rows.length, total, byAccount, byPurchaser, byStore });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

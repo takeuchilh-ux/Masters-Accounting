@@ -27,14 +27,18 @@
 </header>
 
 <main class="max-w-5xl mx-auto px-4 py-6">
-  <!-- 月フィルター -->
-  <div class="flex items-center gap-2 mb-6">
-    <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
+  <!-- 期間フィルター（25日サイクル） -->
+  <div class="flex flex-wrap items-center gap-2 mb-6">
+    <div class="flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
       <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-      <span class="text-xs text-gray-400 whitespace-nowrap">集計月</span>
-      <input type="month" id="filter-month" class="text-sm font-medium text-gray-700 outline-none bg-transparent" onchange="loadSummary()">
+      <input type="date" id="filter-from" class="text-sm font-medium text-gray-700 outline-none bg-transparent" onchange="loadHomeSummary()">
     </div>
-    <button onclick="clearMonth()" class="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors whitespace-nowrap">全期間</button>
+    <span class="text-xs text-gray-400">〜</span>
+    <div class="flex items-center gap-1 bg-white border border-gray-200 rounded-xl px-3 py-2 shadow-sm">
+      <input type="date" id="filter-to" class="text-sm font-medium text-gray-700 outline-none bg-transparent" onchange="loadHomeSummary()">
+    </div>
+    <button onclick="setCurrentCycle()" class="text-xs text-blue-600 hover:text-blue-800 px-3 py-2 rounded-xl bg-white border border-gray-200 shadow-sm hover:bg-blue-50 transition-colors whitespace-nowrap">今サイクル</button>
+    <span id="cycle-label" class="text-xs text-gray-400"></span>
   </div>
 
   <!-- サマリーカード -->
@@ -58,16 +62,22 @@
     </div>
   </div>
 
-  <!-- 事業所別カード -->
-  <div class="mb-8">
-    <h2 class="text-sm font-semibold text-gray-500 mb-3">事業所別集計</h2>
-    <div id="store-cards" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+  <!-- 個人別集計 -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-5">
+    <h2 class="text-sm font-semibold text-gray-500 mb-4">個人別集計</h2>
+    <div id="purchaser-list" class="space-y-1"></div>
   </div>
 
-  <!-- 勘定科目別グラフ -->
+  <!-- 事業所別集計 -->
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-5">
+    <h2 class="text-sm font-semibold text-gray-500 mb-4">事業所別集計</h2>
+    <div id="store-cards" class="space-y-1"></div>
+  </div>
+
+  <!-- 勘定科目別支出 -->
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-    <h2 class="text-sm font-semibold text-gray-500 mb-4">勘定科目別 支出 TOP10</h2>
-    <div id="account-chart" class="space-y-3"></div>
+    <h2 class="text-sm font-semibold text-gray-500 mb-4">勘定科目別支出</h2>
+    <div id="account-list" class="space-y-1"></div>
   </div>
 </main>
 
@@ -104,52 +114,73 @@ async function logout() {
   await fetch('/api/logout', { method: 'POST' });
   location.href = '/login.html';
 }
-function clearMonth() {
-  document.getElementById('filter-month').value = '';
-  loadSummary();
+
+function setCurrentCycle() {
+  const today = new Date();
+  const day = today.getDate(), y = today.getFullYear(), m = today.getMonth();
+  let from, to;
+  if (day <= 25) {
+    from = new Date(y, m - 1, 25).toISOString().split('T')[0];
+    to   = new Date(y, m,     25).toISOString().split('T')[0];
+  } else {
+    from = new Date(y, m,     25).toISOString().split('T')[0];
+    to   = new Date(y, m + 1, 25).toISOString().split('T')[0];
+  }
+  document.getElementById('filter-from').value = from;
+  document.getElementById('filter-to').value   = to;
+  document.getElementById('cycle-label').textContent = `${from} 〜 ${to}`;
+  loadHomeSummary();
 }
-async function loadSummary() {
-  const month = document.getElementById('filter-month').value;
-  const params = month ? `?month=${month}` : '';
+
+async function loadHomeSummary() {
+  const from = document.getElementById('filter-from').value;
+  const to   = document.getElementById('filter-to').value;
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to)   params.set('to',   to);
   try {
-    const r = await fetch('/api/summary' + params);
+    const r = await fetch('/api/home-summary?' + params);
+    if (r.status === 401) { location.href = '/login.html'; return; }
     const d = await r.json();
-    document.getElementById('card-count').textContent = d.count.toLocaleString();
+
+    document.getElementById('card-count').textContent = (d.count || 0).toLocaleString();
     document.getElementById('card-total').textContent = '¥' + (d.total || 0).toLocaleString();
 
-    const colors = [
-      {bg:'#eff6ff',border:'#bfdbfe',text:'#1d4ed8',bar:'#3b82f6'},
-      {bg:'#eef2ff',border:'#c7d2fe',text:'#4338ca',bar:'#6366f1'},
-      {bg:'#f5f3ff',border:'#ddd6fe',text:'#6d28d9',bar:'#8b5cf6'},
-      {bg:'#fdf4ff',border:'#f0abfc',text:'#86198f',bar:'#d946ef'},
-      {bg:'#fff1f2',border:'#fecdd3',text:'#be123c',bar:'#f43f5e'},
-      {bg:'#f0fdf4',border:'#bbf7d0',text:'#15803d',bar:'#22c55e'},
-    ];
-    document.getElementById('store-cards').innerHTML = d.byStore.length ? d.byStore.map((s, i) => {
-      const c = colors[i % colors.length];
-      return `<div style="background:${c.bg};border:1px solid ${c.border}" class="rounded-2xl p-4 cursor-pointer hover:shadow-md transition-all" onclick="location.href='petty-cash.html?store=${encodeURIComponent(s.store)}'">
-        <p style="color:${c.text}" class="text-xs font-medium truncate leading-tight">${s.store}</p>
-        <p style="color:${c.text}" class="text-2xl font-bold mt-2">${s.count}<span class="text-sm font-normal">件</span></p>
-        <p style="color:${c.bar}" class="text-xs mt-1">¥${(s.total||0).toLocaleString()}</p>
-      </div>`;
-    }).join('') : '<p class="text-sm text-gray-400 col-span-full py-4 text-center">データがありません</p>';
+    // 事業所別集計（リスト表示）
+    document.getElementById('store-cards').innerHTML = d.byStore.length
+      ? d.byStore.map(s =>
+          `<div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+            <span class="text-sm text-gray-700 font-medium">${s.store}</span>
+            <span class="text-sm font-bold text-gray-800">¥${(s.total||0).toLocaleString()}</span>
+          </div>`)
+        .join('')
+      : EMPTY;
 
-    const max = d.byAccount[0]?.total || 1;
-    document.getElementById('account-chart').innerHTML = d.byAccount.length ? d.byAccount.map(a =>
-      `<div class="flex items-center gap-3">
-        <span class="text-xs text-gray-600 w-28 flex-shrink-0 truncate">${a.account_category}</span>
-        <div class="flex-1 bg-gray-100 rounded-full h-5 overflow-hidden">
-          <div class="h-full bg-blue-500 rounded-full" style="width:${Math.max(4,(a.total/max)*100).toFixed(1)}%"></div>
-        </div>
-        <span class="text-xs font-medium text-gray-700 w-24 text-right flex-shrink-0">¥${(a.total||0).toLocaleString()}</span>
-      </div>`
-    ).join('') : '<p class="text-sm text-gray-400 text-center py-4">データがありません</p>';
+    // 勘定科目別（バーなし、金額降順）
+    const EMPTY = '<p class="text-sm text-gray-400 text-center py-4">データがありません</p>';
+    document.getElementById('account-list').innerHTML = d.byAccount.length
+      ? d.byAccount.map(a =>
+          `<div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+            <span class="text-sm text-gray-700">${a.account_category}</span>
+            <span class="text-sm font-bold text-gray-800">¥${(a.total||0).toLocaleString()}</span>
+          </div>`)
+        .join('')
+      : EMPTY;
+
+    // 個人別集計
+    document.getElementById('purchaser-list').innerHTML = d.byPurchaser.length
+      ? d.byPurchaser.map(p =>
+          `<div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+            <span class="text-sm text-gray-700 font-medium">${p.purchaser}</span>
+            <span class="text-sm font-bold text-blue-700">¥${(p.total||0).toLocaleString()}</span>
+          </div>`)
+        .join('')
+      : EMPTY;
+
   } catch(e) { console.error(e); }
 }
 
-const now = new Date();
-document.getElementById('filter-month').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-checkAuth().then(() => loadSummary());
+checkAuth().then(() => setCurrentCycle());
 </script>
 </body>
 </html>
