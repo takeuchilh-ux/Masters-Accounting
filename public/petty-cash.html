@@ -1027,6 +1027,7 @@ async function loadList() {
     <table class="w-full text-sm">
       <thead>
         <tr class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
+          <th class="text-left px-3 py-2 font-medium hidden sm:table-cell">登録日</th>
           <th class="text-left px-3 py-2 font-medium">日付</th>
           <th class="text-left px-3 py-2 font-medium">支払先</th>
           <th class="text-left px-3 py-2 font-medium hidden sm:table-cell">事業所</th>
@@ -1040,6 +1041,7 @@ async function loadList() {
           const img = r.receipt_image || r.receipt_drive_url;
           const sc = storeColor[r.store] || '#dbeafe';
           return `<tr class="hover:bg-gray-50 cursor-pointer" onclick='showDetailModal(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
+            <td class="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell">${r.created_at ? r.created_at.slice(0,10) : '—'}</td>
             <td class="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">${r.date || '—'}</td>
             <td class="px-3 py-2.5 min-w-0">
               <p class="font-medium text-gray-800 truncate max-w-32 sm:max-w-none">${r.payee || '—'}</p>
