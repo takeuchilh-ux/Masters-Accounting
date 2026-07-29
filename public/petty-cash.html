@@ -1250,26 +1250,14 @@ function toggleSummary() {
   }
 }
 
+function fmtDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 function setSumCycle() {
   const today = new Date();
-  const day = today.getDate();
   const y = today.getFullYear(), m = today.getMonth();
-  let from, to;
-  if (day <= 25) {
-    // 先月25日〜今月25日
-    const prev = new Date(y, m - 1, 25);
-    const curr = new Date(y, m, 25);
-    from = prev.toISOString().split('T')[0];
-    to   = curr.toISOString().split('T')[0];
-  } else {
-    // 今月25日〜来月25日
-    const curr = new Date(y, m, 25);
-    const next = new Date(y, m + 1, 25);
-    from = curr.toISOString().split('T')[0];
-    to   = next.toISOString().split('T')[0];
-  }
-  document.getElementById('sum-from').value = from;
-  document.getElementById('sum-to').value   = to;
+  document.getElementById('sum-from').value = fmtDate(new Date(y, m - 1, 25));
+  document.getElementById('sum-to').value   = fmtDate(new Date(y, m,     24));
   loadSummary();
 }
 
