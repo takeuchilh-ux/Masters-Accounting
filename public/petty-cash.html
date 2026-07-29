@@ -1022,46 +1022,54 @@ async function loadList() {
     con.innerHTML = '<div class="text-center text-gray-400 py-16"><p class="text-4xl mb-3">📋</p><p>データがありません</p><p class="text-sm mt-1">右下の＋ボタンから入力できます</p></div>';
     return;
   }
-  con.innerHTML = rows.map(r => {
-    const img = r.receipt_image || r.receipt_drive_url;
-    const storeColors = {'藤沢事業所':'blue','藤沢市民病院':'indigo','藤沢湘南台病院':'violet','平塚市民病院':'purple','西横浜国際総合病院':'fuchsia','休日診療所':'pink'};
-    const c = storeColors[r.store] || 'blue';
-    return `<div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 hover:shadow-md transition-shadow cursor-pointer" onclick='showDetailModal(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
-      <div class="flex items-start justify-between gap-3">
-        <div class="flex-1 min-w-0">
-          <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
-            ${r.store ? `<span class="inline-block text-xs bg-${c}-100 text-${c}-700 px-2 py-0.5 rounded-full font-medium">${r.store}</span>` : ''}
-            ${r.account_category ? `<span class="inline-block text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">${r.account_category}</span>` : ''}
-            ${r.purchaser ? `<span class="inline-block text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">${r.purchaser}</span>` : ''}
-          </div>
-          <p class="font-semibold text-gray-800 text-sm truncate">${r.payee || '—'}</p>
-          <p class="text-xs text-gray-400 mt-0.5 truncate">${r.item_name || ''}</p>
-          <div class="flex items-center gap-3 mt-2">
-            ${r.no ? `<span class="text-xs text-gray-400 font-mono bg-gray-50 px-1.5 py-0.5 rounded">No.${r.no}</span>` : ''}
-            <span class="text-xs text-gray-400">${r.date || ''}</span>
-            <span class="font-bold text-blue-700">¥${(r.total_amount || 0).toLocaleString()}</span>
-            ${r.amount_10 ? `<span class="text-xs text-gray-400">10%:¥${r.amount_10.toLocaleString()}</span>` : ''}
-            ${r.amount_8  ? `<span class="text-xs text-gray-400">8%:¥${r.amount_8.toLocaleString()}</span>`  : ''}
-            ${r.amount_non_taxable ? `<span class="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">非課税:¥${Number(r.amount_non_taxable).toLocaleString()}</span>` : ''}
-          </div>
-          ${r.registration_no ? `<p class="text-xs text-gray-400 mt-1">登録番号: ${r.registration_no}</p>` : ''}
-        </div>
-        <div class="flex flex-col items-end gap-2 flex-shrink-0" onclick="event.stopPropagation()">
-          ${img ? `<button onclick="showReceiptModal('${img}','${(r.payee||'').replace(/'/g,"\\'")}','${r.date||''}')" class="text-blue-600 hover:text-blue-800">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          </button>` : ''}
-          <div class="flex gap-1">
-            <button onclick='editRow(${JSON.stringify(r).replace(/'/g,"&#39;")})' class="p-1.5 rounded-lg text-gray-400 hover:bg-blue-50 hover:text-blue-600">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-            </button>
-            <button onclick="deleteRow('${r._id}')" class="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-500">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  }).join('');
+  const storeColor = {'藤沢事業所':'#dbeafe','藤沢市民病院':'#e0e7ff','藤沢湘南台病院':'#ede9fe','平塚市民病院':'#f3e8ff','西横浜国際総合病院':'#fce7f3','休日診療所':'#fce7f3'};
+  con.innerHTML = `<div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
+          <th class="text-left px-3 py-2 font-medium">日付</th>
+          <th class="text-left px-3 py-2 font-medium">支払先</th>
+          <th class="text-left px-3 py-2 font-medium hidden sm:table-cell">事業所</th>
+          <th class="text-left px-3 py-2 font-medium hidden md:table-cell">購入者</th>
+          <th class="text-right px-3 py-2 font-medium">金額</th>
+          <th class="px-2 py-2"></th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-50">
+        ${rows.map(r => {
+          const img = r.receipt_image || r.receipt_drive_url;
+          const sc = storeColor[r.store] || '#dbeafe';
+          return `<tr class="hover:bg-gray-50 cursor-pointer" onclick='showDetailModal(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
+            <td class="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">${r.date || '—'}</td>
+            <td class="px-3 py-2.5 min-w-0">
+              <p class="font-medium text-gray-800 truncate max-w-32 sm:max-w-none">${r.payee || '—'}</p>
+              ${r.account_category ? `<p class="text-xs text-gray-400 truncate">${r.account_category}</p>` : ''}
+            </td>
+            <td class="px-3 py-2.5 hidden sm:table-cell">
+              ${r.store ? `<span class="text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap" style="background:${sc}">${r.store}</span>` : '—'}
+            </td>
+            <td class="px-3 py-2.5 hidden md:table-cell text-xs text-gray-600">${r.purchaser || '—'}</td>
+            <td class="px-3 py-2.5 text-right whitespace-nowrap">
+              <span class="font-bold text-blue-700">¥${(r.total_amount || 0).toLocaleString()}</span>
+            </td>
+            <td class="px-2 py-2 text-right whitespace-nowrap" onclick="event.stopPropagation()">
+              <div class="flex items-center justify-end gap-0.5">
+                ${img ? `<button onclick="showReceiptModal('${img}','${(r.payee||'').replace(/'/g,"\\'")}','${r.date||''}')" class="p-1.5 text-blue-400 hover:text-blue-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                </button>` : '<span class="w-7"></span>'}
+                <button onclick='editRow(${JSON.stringify(r).replace(/'/g,"&#39;")})' class="p-1.5 text-gray-300 hover:text-blue-500">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </button>
+                <button onclick="deleteRow('${r._id}')" class="p-1.5 text-gray-300 hover:text-red-500">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>`;
 }
 
 function editRow(r) {
