@@ -693,7 +693,7 @@ async function ocrOneFile(i) {
   try {
     const { hash, duplicate, existing } = await checkDuplicate(wizardFiles[i]);
     if (duplicate && existing) {
-      const ok = confirm(`⚠️ このレシートは既に登録されている可能性があります。\n\n登録済み: ${existing.date} / ${existing.payee} / ¥${Number(existing.total_amount||0).toLocaleString()}（No.${existing.no}）\n\n続けて登録しますか？`);
+      const ok = confirm(`⚠️ このレシートは既に登録されている可能性があります。\n\n登録済み: ${fmtJP(existing.date)} / ${existing.payee} / ¥${Number(existing.total_amount||0).toLocaleString()}（No.${existing.no}）\n\n続けて登録しますか？`);
       if (!ok) {
         wizardResults[i] = { _fileIdx: i, _checked: false, _error: '重複のためスキップ' };
         statusEl.textContent = 'スキップ ⚠️';
@@ -863,7 +863,7 @@ function renderSaveList() {
       <input type="checkbox" class="mt-0.5 w-4 h-4 save-check" data-idx="${i}" ${r._checked && !r._error ? 'checked' : ''} ${r._error ? 'disabled' : ''}>
       <div class="flex-1 min-w-0">
         <p class="font-medium text-sm text-gray-800">${r.payee || '（支払先未入力）'}</p>
-        <p class="text-xs text-gray-500">${r.date || '日付未入力'} | ${r.store || '事業所未選択'} | ¥${(r.total_amount||0).toLocaleString()}</p>
+        <p class="text-xs text-gray-500">${fmtJP(r.date) || '日付未入力'} | ${r.store || '事業所未選択'} | ¥${(r.total_amount||0).toLocaleString()}</p>
         ${r._error ? `<p class="text-xs text-red-500 mt-0.5">⚠️ ${r._error}</p>` : ''}
       </div>
     </label>`
@@ -1028,7 +1028,7 @@ async function loadList() {
       <thead>
         <tr class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
           <th class="text-left px-3 py-2 font-medium hidden sm:table-cell">登録日</th>
-          <th class="text-left px-3 py-2 font-medium">日付</th>
+          <th class="text-left px-3 py-2 font-medium">レシート日付</th>
           <th class="text-left px-3 py-2 font-medium">支払先</th>
           <th class="text-left px-3 py-2 font-medium hidden sm:table-cell">事業所</th>
           <th class="text-left px-3 py-2 font-medium hidden md:table-cell">購入者</th>
@@ -1041,8 +1041,8 @@ async function loadList() {
           const img = r.receipt_image || r.receipt_drive_url;
           const sc = storeColor[r.store] || '#dbeafe';
           return `<tr class="hover:bg-gray-50 cursor-pointer" onclick='showDetailModal(${JSON.stringify(r).replace(/'/g,"&#39;")})'>
-            <td class="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell">${r.created_at ? r.created_at.slice(0,10) : '—'}</td>
-            <td class="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">${r.date || '—'}</td>
+            <td class="px-3 py-2.5 text-xs text-gray-400 whitespace-nowrap hidden sm:table-cell">${fmtJP(r.created_at)}</td>
+            <td class="px-3 py-2.5 text-xs text-gray-500 whitespace-nowrap">${fmtJP(r.date)}</td>
             <td class="px-3 py-2.5 min-w-0">
               <p class="font-medium text-gray-800 truncate max-w-32 sm:max-w-none">${r.payee || '—'}</p>
               ${r.account_category ? `<p class="text-xs text-gray-400 truncate">${r.account_category}</p>` : ''}
@@ -1163,7 +1163,7 @@ function showDetailModal(r) {
   // 詳細テーブル
   const rows = [
     ['No.', r.no || '—'],
-    ['日付', r.date || '—'],
+    ['レシート日付', fmtJP(r.date)],
     ['支払先', r.payee || '—'],
     ['品名', r.item_name || '—'],
     ['勘定科目', r.account_category || '—'],
@@ -1202,7 +1202,7 @@ function closeDetailModal() {
 function showReceiptModal(url, payee, date) {
   document.getElementById('receipt-modal-img').src = url;
   document.getElementById('receipt-modal-payee').textContent = payee;
-  document.getElementById('receipt-modal-date').textContent = date;
+  document.getElementById('receipt-modal-date').textContent = fmtJP(date);
   document.getElementById('receipt-modal-link').href = url;
   document.getElementById('receipt-modal').classList.remove('hidden');
 }
@@ -1262,6 +1262,13 @@ function toggleSummary() {
 
 function fmtDate(d) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtJP(str) {
+  if (!str) return '—';
+  const s = str.slice(0, 10);
+  const [y, m, d] = s.split('-');
+  if (!y || !m || !d) return str;
+  return `${y}年${parseInt(m)}月${parseInt(d)}日`;
 }
 function setSumCycle() {
   const today = new Date();
